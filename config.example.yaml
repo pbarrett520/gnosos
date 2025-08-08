@@ -1,0 +1,24 @@
+providers:
+  - name: lmstudio
+    base_url: http://localhost:1234/v1
+
+scoring:
+  window_tokens: 256
+  ewma_span_tokens: 1000
+  thresholds: { soft: 0.30, alert: 0.50, pause: 0.60 }
+  boosts: { near_tool: 0.10, in_think: 0.10, repetition: 0.05, quoted: -0.10 }
+
+storage:
+  path: ./data
+  retention_days: 7
+  privacy_mode: false
+
+transport:
+  http_port: 8080
+  sse_port: 7687
+  ws_port: 7688
+
+tts:
+  enabled: false
+  min_score: 0.50
+  profiles: [Sable, Voxen]

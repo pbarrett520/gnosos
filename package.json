@@ -1,0 +1,24 @@
+{
+  "name": "gnosos",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot misalign.ts",
+    "start": "bun run misalign.ts",
+    "build:bin": "bun build --compile misalign.ts --outfile misalign",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "hono": "^4.9.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.0.15"
+  }
+}
