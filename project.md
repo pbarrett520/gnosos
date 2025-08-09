@@ -26,9 +26,17 @@ This document captures what’s implemented in this repo today and what remains 
   - Allowlist dampener: reduces score for allowed phrases (spec §7 Allowlist dampeners §241–242).
 - 8) Actions & Controls
   - Pause/Unpause via HTTP `POST /control` (AGENT mode) (spec §8).
-- 9) UI (MVP)
-  - Static UI served from `public/ui/`: SSE log of `/events?session_id`, buttons for Pause/Unpause, session selector (spec §9 Transport SSE→UI; WS not yet).
+  - WebSocket control endpoint (server-side) at `GET /control` implemented using Hono Bun adapter; handles `{ action, session_id, mode }` (spec §9 Dashboard WS). UI WS client pending.
+- 9) UI (MVP → skeleton dashboard)
+  - Static UI served from `public/ui/` (spec §9). Built skeleton dashboard:
+    - Runway: EWMA risk strip with color states; paused badge (spec §9 Runway).
+    - Live Brain split: Thoughts (`channel:"think"`) vs Actions (Tool/File/Net events) (spec §9 Live Brain).
+    - Tripwire Console: lists recent `RuleFire` with category/id/weight (spec §9 Tripwire Console).
+    - Evidence panel: fetch/refresh `/evidence?session_id=...` to display JSON (spec §8 Evidence Packet; §9 Evidence slice).
+    - Raw Log: collapsible SSE raw feed for debugging.
+    - Testability: `data-testid` hooks added for Playwright MCP.
   - `/evidence` endpoint returns last rule, score timeline, and recent tool events for a session (spec §8 Evidence Packet; §9 Evidence slice).
+  - Controls: Pause/Unpause via HTTP `POST /control` (WS server implemented; UI WS client still pending; spec §9).
 - 11) Alerts (MVP)
   - TTS wiring: ElevenLabs client invoked on `Alert` (≥ min_score) and `hard_pause`; env-based (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`) (spec §11; triggers §348–366).
 - 12) OpenAI Proxy Semantics
@@ -40,8 +48,12 @@ This document captures what’s implemented in this repo today and what remains 
 - 15) Acceptance Criteria (partial coverage via tests)
   - Hard pause destructive ops ✓ (≤250 ms not explicitly measured yet).
   - Threshold alert from repeated deception ✓ (alert then pause);
-  - UI shows live token stream ✓ (minimal); pause controls ✓; evidence endpoint ✓;
+  - UI shows live token stream ✓ (skeleton dashboard: Thoughts/Actions, risk strip, rules); pause controls ✓; evidence endpoint ✓;
   - Storage writes NDJSON ✓; retention purge utility ✓; privacy mode ✓; no phone-home ✓.
+  - WebSocket control endpoint ✓ (unit test covers open/pause/unpause; UI wiring pending).
+
+### Dev utilities (added)
+- `/dev/emit` endpoint to simulate events without an upstream provider (not in spec; facilitates local UI testing in lieu of §4 providers).
 
 ## Gaps / Next Work (prioritized; mapped to spec)
 - 3) System Architecture
@@ -72,7 +84,7 @@ This document captures what’s implemented in this repo today and what remains 
 ## How to Run (current)
 - Configure `config.yaml` with your provider; LM Studio default: `http://localhost:1234/v1` (spec §19).
 - Dev: `bun run dev`; Proxy: `http://localhost:8080/v1/chat/completions`.
-- UI: `http://localhost:8080/ui?session_id=demo`; Controls: `POST /control`.
+- UI: `http://localhost:8080/ui?session_id=demo`; Controls: WS `ws://localhost:8080/control?session_id=...` (server ready) or HTTP `POST /control` (current UI fallback).
 - Tests: `bun test`; Build: `bun build --compile misalign.ts --outfile misalign`.
 
 ## Acceptance Coverage Snapshot

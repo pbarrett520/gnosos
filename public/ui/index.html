@@ -5,18 +5,85 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Misalignment Monitor</title>
   <script src="https://cdn.tailwindcss.com"></script>
-</head>
+  <meta name="color-scheme" content="dark" />
+  <!-- /events -->
+  <style>
+    /* prevent text selection flicker on rapid updates */
+    * { -webkit-tap-highlight-color: transparent; }
+  </style>
+  </head>
 <body class="bg-slate-950 text-slate-200 font-sans">
   <div class="p-4 space-y-4">
-    <h1 class="text-xl font-semibold">Misalignment Monitor</h1>
-    <div class="flex items-center gap-2">
-      <label class="text-sm">Session ID</label>
-      <input id="sid" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm" placeholder="demo" />
-      <button id="connect" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-2 py-1 rounded">Connect</button>
-      <button id="pause" class="bg-amber-600 hover:bg-amber-500 text-white text-sm px-2 py-1 rounded">Pause</button>
-      <button id="unpause" class="bg-slate-600 hover:bg-slate-500 text-white text-sm px-2 py-1 rounded">Unpause</button>
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-semibold">Misalignment Monitor</h1>
+      <div class="flex items-center gap-2">
+        <label class="text-sm">Session ID</label>
+        <input id="sid" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm" placeholder="demo" data-testid="session-input" />
+        <button id="connect" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-2 py-1 rounded" data-testid="connect-btn">Connect</button>
+        <button id="pause" class="bg-amber-600 hover:bg-amber-500 text-white text-sm px-2 py-1 rounded" data-testid="pause-btn">Pause</button>
+        <button id="unpause" class="bg-slate-600 hover:bg-slate-500 text-white text-sm px-2 py-1 rounded" data-testid="unpause-btn">Unpause</button>
+      </div>
     </div>
-    <div id="log" class="whitespace-pre-wrap font-mono border border-slate-800 rounded p-2 bg-slate-900 h-[60vh] overflow-auto"></div>
+
+    <!-- Runway -->
+    <div class="flex items-center gap-3">
+      <div id="riskStrip" class="h-2 flex-1 rounded bg-green-700" data-testid="risk-strip"></div>
+      <div class="text-sm flex items-center gap-2">
+        <span>EWMA:</span>
+        <span id="ewmaScore" class="font-mono" data-testid="ewma-score">0.00</span>
+        <span class="text-xs text-slate-400">Instant:</span>
+        <span id="instantScore" class="font-mono text-xs" data-testid="instant-score">0.00</span>
+        <span id="pausedBadge" class="hidden text-xs ml-3 px-2 py-0.5 rounded bg-amber-700" data-testid="paused-badge">PAUSED</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Live Brain -->
+      <div class="lg:col-span-2 space-y-4">
+        <div class="border border-slate-800 rounded bg-slate-900">
+          <div class="px-3 py-2 border-b border-slate-800 text-sm text-slate-300">Live Brain</div>
+          <div class="grid grid-cols-1 md:grid-cols-2">
+            <div class="p-3 border-r border-slate-800">
+              <div class="text-xs text-slate-400 mb-2">Thoughts</div>
+              <div id="thoughts" class="font-mono text-sm space-y-1 h-[32vh] overflow-auto" data-testid="thoughts-stream"></div>
+            </div>
+            <div class="p-3">
+              <div class="text-xs text-slate-400 mb-2">Actions</div>
+              <div id="actions" class="font-mono text-sm space-y-1 h-[32vh] overflow-auto" data-testid="actions-stream"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw Log (collapsible) -->
+        <div class="border border-slate-800 rounded bg-slate-900">
+          <div class="px-3 py-2 border-b border-slate-800 text-sm text-slate-300 flex items-center justify-between">
+            <span>Raw Log</span>
+            <button id="toggleRaw" class="text-xs text-slate-400 hover:text-slate-200" data-testid="raw-toggle">toggle</button>
+          </div>
+          <div id="rawWrap" class="p-3">
+            <div id="log" class="whitespace-pre-wrap font-mono border border-slate-800 rounded p-2 bg-slate-950 h-[24vh] overflow-auto" data-testid="raw-log"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tripwire Console / Evidence -->
+      <div class="space-y-4">
+        <div class="border border-slate-800 rounded bg-slate-900">
+          <div class="px-3 py-2 border-b border-slate-800 text-sm text-slate-300">Tripwire Console</div>
+          <div id="rules" class="p-3 space-y-2 h-[28vh] overflow-auto" data-testid="rule-list"></div>
+        </div>
+
+        <div class="border border-slate-800 rounded bg-slate-900">
+          <div class="px-3 py-2 border-b border-slate-800 text-sm text-slate-300 flex items-center justify-between">
+            <span>Evidence</span>
+            <button id="refreshEvidence" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" data-testid="evidence-refresh">Refresh</button>
+          </div>
+          <div class="p-3">
+            <pre id="evidence" class="text-xs text-slate-300 h-[24vh] overflow-auto" data-testid="evidence-json">{}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="/ui/app.js"></script>
 </body>

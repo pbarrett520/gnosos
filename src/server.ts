@@ -1,12 +1,13 @@
 import { Hono } from "hono";
-import { EventBus, BusEvent } from "./eventBus.ts";
+import { EventBus } from "./eventBus.ts";
+import type { BusEvent } from "./eventBus.ts";
 import { CircuitBreaker } from "./circuitBreaker.ts";
 import { createOpenAIProvider } from "./providers/openai.ts";
 import { loadConfig } from "./config.ts";
 import { deriveSessionId } from "./session.ts";
 import { wireTts } from "./tts.ts";
 import { createElevenLabsClient } from "./tts_elevenlabs.ts";
-import { serveStatic } from "hono/bun";
+import { serveStatic, upgradeWebSocket } from "hono/bun";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -138,6 +139,67 @@ export function createApp(opts: CreateAppOptions = {}) {
     });
   });
 
+  // Dev-only emitter to simulate events without an upstream LLM
+  app.post('/dev/emit', async (c) => {
+    try {
+      const body = await c.req.json();
+      const sessionId = String(body?.session_id || 'demo');
+      const type = String(body?.type || 'Token');
+      const payload = body?.payload ?? {};
+      const ev: BusEvent = {
+        ts: new Date().toISOString(),
+        sessionId,
+        type: type as BusEvent['type'],
+        seq: 0,
+        payload,
+      };
+      bus.publish(ev);
+      return c.json({ ok: true });
+    } catch {
+      return c.text('bad request', 400);
+    }
+  });
+
+  // WebSocket control channel (UI → controls), complements HTTP /control
+  app.get('/control', upgradeWebSocket((c) => {
+    const querySid = c.req.query('session_id') || '';
+    return {
+      onOpen: (_evt, ws) => {
+        const hello = { ok: true, type: 'hello', session_id: querySid } as const;
+        try { ws.send(JSON.stringify(hello)); } catch {}
+      },
+      onMessage: (evt, ws) => {
+        try {
+          // evt.data is string | ArrayBuffer
+          const data = (evt as MessageEvent).data as string | ArrayBuffer;
+          const text = typeof data === 'string' ? data : new TextDecoder().decode(data as ArrayBuffer);
+          const body = JSON.parse(text || '{}');
+          const action = body?.action as string | undefined;
+          const sid = String(body?.session_id || querySid || '');
+          if (!sid) {
+            ws.send(JSON.stringify({ ok: false, error: 'session_id required' }));
+            return;
+          }
+          if (action === 'pause') {
+            const mode = (body?.mode || 'AGENT') as any;
+            breaker.pause(sid, mode);
+            ws.send(JSON.stringify({ ok: true, paused: true }));
+            return;
+          }
+          if (action === 'unpause') {
+            breaker.unpause(sid);
+            ws.send(JSON.stringify({ ok: true, paused: false }));
+            return;
+          }
+          ws.send(JSON.stringify({ ok: false, error: 'unknown action' }));
+        } catch {
+          try { ws.send(JSON.stringify({ ok: false, error: 'bad request' })); } catch {}
+        }
+      },
+      onClose: () => {},
+    };
+  }))
+
   app.post("/v1/chat/completions", async (c) => {
     if (!opts.chatHandler) {
       // Provider fallback: choose from config (sync load here via cwd)
@@ -154,7 +216,7 @@ export function createApp(opts: CreateAppOptions = {}) {
     try {
       const clone1 = c.req.raw.clone();
       if (clone1.headers.get("content-type")?.includes("application/json")) {
-        const j = await clone1.json();
+        const j: any = await clone1.json();
         if (j && typeof j.model === "string") model = j.model;
       }
     } catch {}

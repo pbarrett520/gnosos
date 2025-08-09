@@ -1,8 +1,11 @@
 - [ ] Circuit Breaker: implement TOOL and IO modes, wire to tool/net proxies (spec §3, §8)
 - [ ] Detection: complete tripwires (REWARD_HACKING, CONCEALMENT, GOAL_MODIFICATION, MANIPULATION, DATA_EXFIL) (spec §259–307)
 - [ ] Detection: repetition detection and quoted/meta guards (spec §231–241)
-- [ ] UI: Runway (risk strip), Live Brain split view, Tripwire Console with allowlist (spec §9)
-- [ ] UI: WebSocket control channel; replace/augment HTTP `/control` (spec §9)
+- [x] UI: Runway (risk strip), Live Brain split view, Tripwire Console list, Evidence panel (skeleton) (spec §9)
+- [ ] UI: Tripwire Console allowlist actions + Evidence packet download (spec §9)
+- [x] UI: WebSocket control endpoint (server) at GET /control; hello + pause/unpause messages; keep HTTP fallback (spec §9)
+- [ ] UI: WebSocket client wiring in app.js; reconnect + HTTP fallback (spec §9)
+- [ ] UI: Playwright MCP tests for WS (handshake, pause/unpause over WS, fallback) (spec §9)
 - [ ] Evidence: downloadable NDJSON slice (spec §8, §9)
 - [ ] Storage: daily gzip rotation; scheduled retention purge (spec §10)
 - [ ] Alerts: randomized phrases by category/severity; voice profiles (spec §11)
@@ -11,3 +14,6 @@
 - [ ] Privacy: configurable redaction allow/deny lists; UI privacy toggle (spec §14)
 - [ ] Build: single-binary doc + sample `config.yaml` finalization (spec §18–19)
 - [ ] Extensibility: internal plugin API (subscribe/emit) (spec §17)
+
+### New utility for local testing (not in spec)
+- [x] Add `/dev/emit` endpoint to simulate events for the UI without upstream LLM
