@@ -16,11 +16,14 @@ bun --version
 bun install
 ```
 
-3) Configure provider
-- LM Studio (recommended local): enable OpenAI server at `http://localhost:1234/v1`
+3) Configure provider (now via UI — no YAML edits required)
+- Start the app, open the UI, click "Settings", and set your upstream provider base URL (e.g., LM Studio `http://localhost:1234/v1`, Ollama `http://localhost:11434/v1`, or OpenRouter `https://api.openrouter.ai/v1`).
+- Optional: if your provider needs an API key, enter the env var name (e.g., `OPENROUTER_KEY`). The server will read the value from your environment.
+
+YAML remains optional for advanced users:
 ```
 cp config.example.yaml config.yaml
-# edit providers[0].base_url if needed
+# edit manually if you prefer
 ```
 
 Optional: OpenRouter
@@ -38,6 +41,24 @@ open http://localhost:8080/ui?session_id=demo
 ```
 
 Point your client (Cursor, etc.) at `http://localhost:8080/v1/chat/completions`.
+
+### UI Settings & Config API
+- Settings lives in the top bar of the dashboard. Changes are saved immediately and apply to new requests without a restart.
+- Endpoints:
+  - `GET /config` → current effective config
+  - `POST /config` → deep-merge patch and persist to `config.yaml`
+
+Only provider settings are exposed in the v1 UI. Additional config areas will be added incrementally.
+
+### First-run check (no client needed)
+- Click "Test prompt" in the UI to send a quick prompt via the configured provider. Tokens will stream into the Output panel.
+- Output shows model text; Actions lists only Tool/File/Net events.
+
+Tip: if port 8080 is in use, run on a different port for this session:
+```
+$env:PORT=8090; $env:HTTP_PORT=8090; bun run misalign.ts
+# UI → http://localhost:8090/ui?session_id=demo
+```
 
 ## TTS (ElevenLabs)
 Enable in `config.yaml` (tts.enabled: true) and set env:

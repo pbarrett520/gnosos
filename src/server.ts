@@ -3,13 +3,14 @@ import { EventBus } from "./eventBus.ts";
 import type { BusEvent } from "./eventBus.ts";
 import { CircuitBreaker } from "./circuitBreaker.ts";
 import { createOpenAIProvider } from "./providers/openai.ts";
-import { loadConfig } from "./config.ts";
+import { loadConfig, patchConfig } from "./config.ts";
 import { deriveSessionId } from "./session.ts";
 import { wireTts } from "./tts.ts";
 import { createElevenLabsClient } from "./tts_elevenlabs.ts";
 import { serveStatic, upgradeWebSocket } from "hono/bun";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Analyzer } from "./analyzer/analyzer.ts";
 
 export type CreateAppOptions = {
   // Dependency injection placeholders
@@ -27,6 +28,14 @@ export function createApp(opts: CreateAppOptions = {}) {
   (async () => {
     try {
       const cfg = await loadConfig({ cwd: process.cwd() });
+      // Start analyzer with config thresholds
+      const analyzer = new Analyzer({
+        bus,
+        breaker,
+        ewmaSpanTokens: cfg.scoring?.ewma_span_tokens,
+        thresholds: cfg.scoring?.thresholds,
+      });
+      analyzer.start();
       if (cfg.tts?.enabled) {
         const client = createElevenLabsClient({
           apiKey: process.env.ELEVENLABS_API_KEY,
@@ -50,6 +59,21 @@ export function createApp(opts: CreateAppOptions = {}) {
       return c.html(html);
     } catch {
       return c.text('UI not found. Ensure public/ui/index.html exists.', 500);
+    }
+  });
+
+  // Config endpoints: allow the UI to read and update config
+  app.get("/config", async (c) => {
+    const cfg = await loadConfig({ cwd: process.cwd() });
+    return c.json(cfg);
+  });
+  app.post("/config", async (c) => {
+    try {
+      const body = await c.req.json();
+      const updated = await patchConfig({ cwd: process.cwd(), patch: body || {} });
+      return c.json({ ok: true, config: updated });
+    } catch {
+      return c.text("bad request", 400);
     }
   });
 
@@ -160,6 +184,87 @@ export function createApp(opts: CreateAppOptions = {}) {
     }
   });
 
+  // Dev helper: trigger a test chat against the configured provider to generate a live stream
+  app.post('/dev/test_chat', async (c) => {
+    try {
+      const body = await c.req.json();
+      const sid = String(body?.session_id || 'demo');
+      const prompt = String(body?.prompt || 'Say hello.');
+      const model = String(body?.model || 'openai/gpt-oss-20b');
+
+      const cfg = await loadConfig({ cwd: process.cwd() });
+      const provider = createOpenAIProvider({
+        baseUrl: opts.providerBaseUrl ?? (cfg.providers[0]?.base_url || 'http://localhost:1234/v1'),
+        apiKeyEnv: cfg.providers[0]?.api_key_env,
+      });
+
+      // Start markers
+      const start: BusEvent = { ts: new Date().toISOString(), sessionId: sid, type: 'SessionStart', seq: 0, payload: { source: 'dev_test' } };
+      bus.publish(start);
+
+      // Kick off in background, mirror SSE tokens to bus
+      (async () => {
+        try {
+          const ctl = breaker.getAbortController(sid);
+          const req = new Request('http://localhost/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-session-id': sid },
+            body: JSON.stringify({
+              model,
+              stream: true,
+              messages: [
+                { role: 'system', content: 'You are a helpful assistant.' },
+                { role: 'user', content: prompt },
+              ],
+            }),
+            signal: ctl.signal,
+          });
+          const resp = await provider(req);
+          if ((resp.headers.get('content-type') || '').includes('text/event-stream') && resp.body) {
+            const reader = resp.body.getReader();
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              if (value) {
+                const text = new TextDecoder().decode(value);
+                const lines = text.split(/\n\n/).map((s) => s.trim()).filter(Boolean);
+                for (const line of lines) {
+                  if (!line.startsWith('data:')) continue;
+                  const payload = line.slice(5).trim();
+                  if (payload === '[DONE]') continue;
+                  try {
+                    const obj = JSON.parse(payload);
+                    const deltas = obj?.choices?.map((c: any) => c?.delta?.content).filter(Boolean) || [];
+                    for (const t of deltas) {
+                      bus.publish({ ts: new Date().toISOString(), sessionId: sid, type: 'Token', seq: 0, payload: { text: String(t), channel: 'final' } });
+                    }
+                  } catch {}
+                }
+              }
+            }
+          } else {
+            // Non-streaming: best-effort emit final text
+            try {
+              const txt = await resp.text();
+              const obj = JSON.parse(txt);
+              const content = obj?.choices?.[0]?.message?.content;
+              if (typeof content === 'string' && content.length > 0) {
+                bus.publish({ ts: new Date().toISOString(), sessionId: sid, type: 'Token', seq: 0, payload: { text: content, channel: 'final' } });
+              }
+            } catch {}
+          }
+        } catch {}
+        finally {
+          bus.publish({ ts: new Date().toISOString(), sessionId: sid, type: 'SessionEnd', seq: 1, payload: { source: 'dev_test' } });
+        }
+      })();
+
+      return c.json({ ok: true });
+    } catch {
+      return c.text('bad request', 400);
+    }
+  });
+
   // WebSocket control channel (UI → controls), complements HTTP /control
   app.get('/control', upgradeWebSocket((c) => {
     const querySid = c.req.query('session_id') || '';
@@ -201,13 +306,13 @@ export function createApp(opts: CreateAppOptions = {}) {
   }))
 
   app.post("/v1/chat/completions", async (c) => {
-    if (!opts.chatHandler) {
-      // Provider fallback: choose from config (sync load here via cwd)
-      const cfg = await loadConfig({ cwd: process.cwd() });
-      const provider = createOpenAIProvider({ baseUrl: opts.providerBaseUrl ?? (cfg.providers[0]?.base_url || "http://localhost:1234/v1"), apiKeyEnv: cfg.providers[0]?.api_key_env });
-      const resp = await provider(c.req.raw);
-      return resp;
-    }
+    // Choose upstream: injected handler (tests) or provider from config
+    const cfg = await loadConfig({ cwd: process.cwd() });
+    const provider = createOpenAIProvider({
+      baseUrl: opts.providerBaseUrl ?? (cfg.providers[0]?.base_url || "http://localhost:1234/v1"),
+      apiKeyEnv: cfg.providers[0]?.api_key_env,
+    });
+    const upstream = opts.chatHandler ?? provider;
 
     const headers = c.req.raw.headers;
     const clientAddr = c.req.header("x-forwarded-for") ?? "127.0.0.1";
@@ -247,7 +352,7 @@ export function createApp(opts: CreateAppOptions = {}) {
     const ctl = breaker.getAbortController(sessionId);
 
     try {
-      const resp = await opts.chatHandler(new Request(c.req.raw, { signal: ctl.signal }));
+      const resp = await upstream(new Request(c.req.raw, { signal: ctl.signal }));
       // If streaming SSE, tee content to tokens on bus by parsing chunks
       if ((resp.headers.get("content-type") || "").includes("text/event-stream") && resp.body) {
         const encoder = new TextEncoder();

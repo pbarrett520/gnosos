@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 
@@ -25,6 +25,28 @@ export async function loadConfig(opts: { cwd: string }): Promise<AppConfig> {
   const text = readFileSync(path, "utf8");
   const doc = YAML.parse(text) ?? {};
   return mergeDeep(JSON.parse(JSON.stringify(defaultConfig)), doc);
+}
+
+/**
+ * Persist the provided config object to config.yaml in the given cwd.
+ * This performs a straightforward YAML stringify; callers should pass
+ * a fully merged config (use patchConfig for deep-merge behavior).
+ */
+export async function saveConfig(opts: { cwd: string; config: AppConfig }) {
+  const path = join(opts.cwd, "config.yaml");
+  const text = YAML.stringify(opts.config);
+  writeFileSync(path, text, "utf8");
+}
+
+/**
+ * Deep-merge a partial patch into the current config and persist it.
+ * Returns the resulting config.
+ */
+export async function patchConfig(opts: { cwd: string; patch: Partial<AppConfig> }): Promise<AppConfig> {
+  const current = await loadConfig({ cwd: opts.cwd });
+  const next = mergeDeep(JSON.parse(JSON.stringify(current)), opts.patch);
+  await saveConfig({ cwd: opts.cwd, config: next });
+  return next;
 }
 
 function isObject(v: any): v is Record<string, any> {

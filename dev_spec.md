@@ -122,7 +122,7 @@ Latency SLOs
 
 Provider Adapters
 Minimal per-provider overrides (base URL, auth header), same request/response surface as OpenAI. If a provider can return logprobs or separate reasoning channels, include them; otherwise omit.
-5) Config (optional config.yaml)
+ 5) Config (UI-first, optional config.yaml)
 
 providers:
   - name: openrouter
@@ -154,7 +154,7 @@ tts:
   min_score: 0.50
   profiles: [Sable, Voxen]
 
-If absent, the binary runs with embedded defaults.
+If absent, the binary runs with embedded defaults. The application is fully configurable from within the UI for common settings. A Settings panel writes to `config.yaml` via `POST /config` and changes take effect for new requests without restarts.
 6) Event Model (NDJSON, one object per line)
 
 Common envelope
@@ -323,7 +323,7 @@ DATA_EXFIL:
 
         Token window (snippet), rule fired, category, weight, context flags, contributors, score timeline, last tool events, download NDJSON slice.
 
-9) UI (Dark, “Linux desktop”)
+ 9) UI (Dark, “Linux desktop”)
 
     Runway: list agents (risk strip green→amber→red), EWMA score, last tripwire.
 
@@ -334,6 +334,7 @@ DATA_EXFIL:
     Evidence: collapsible packet; NDJSON slice download.
 
     Transport: SSE → UI; WebSocket ← controls.
+    Settings: UI-driven configuration for upstream provider (base URL, optional API key env). Additional config (thresholds, privacy mode) to be exposed incrementally.
 
 10) Storage & Retention
 

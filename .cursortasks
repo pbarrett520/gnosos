@@ -3,9 +3,12 @@
 - [ ] Detection: repetition detection and quoted/meta guards (spec §231–241)
 - [x] UI: Runway (risk strip), Live Brain split view, Tripwire Console list, Evidence panel (skeleton) (spec §9)
 - [ ] UI: Tripwire Console allowlist actions + Evidence packet download (spec §9)
+- [x] UI: Settings modal for provider config; server `GET/POST /config` to persist to `config.yaml` (no YAML edits required)
 - [x] UI: WebSocket control endpoint (server) at GET /control; hello + pause/unpause messages; keep HTTP fallback (spec §9)
 - [ ] UI: WebSocket client wiring in app.js; reconnect + HTTP fallback (spec §9)
 - [ ] UI: Playwright MCP tests for WS (handshake, pause/unpause over WS, fallback) (spec §9)
+ - [x] UI: Test prompt modal; server `/dev/test_chat` to validate streaming from configured provider
+ - [x] UI: Clarify stream mapping (Output for tokens; Actions for tools/IO only)
 - [ ] Evidence: downloadable NDJSON slice (spec §8, §9)
 - [ ] Storage: daily gzip rotation; scheduled retention purge (spec §10)
 - [ ] Alerts: randomized phrases by category/severity; voice profiles (spec §11)
@@ -17,3 +20,4 @@
 
 ### New utility for local testing (not in spec)
 - [x] Add `/dev/emit` endpoint to simulate events for the UI without upstream LLM
+- [x] Add `/dev/test_chat` endpoint to drive a live test call from the UI

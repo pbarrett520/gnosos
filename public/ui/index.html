@@ -22,6 +22,8 @@
         <button id="connect" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-2 py-1 rounded" data-testid="connect-btn">Connect</button>
         <button id="pause" class="bg-amber-600 hover:bg-amber-500 text-white text-sm px-2 py-1 rounded" data-testid="pause-btn">Pause</button>
         <button id="unpause" class="bg-slate-600 hover:bg-slate-500 text-white text-sm px-2 py-1 rounded" data-testid="unpause-btn">Unpause</button>
+        <button id="settings" class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-2 py-1 rounded" data-testid="settings-btn">Settings</button>
+        <button id="testPrompt" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-2 py-1 rounded" data-testid="testprompt-btn">Test prompt</button>
       </div>
     </div>
 
@@ -44,7 +46,7 @@
           <div class="px-3 py-2 border-b border-slate-800 text-sm text-slate-300">Live Brain</div>
           <div class="grid grid-cols-1 md:grid-cols-2">
             <div class="p-3 border-r border-slate-800">
-              <div class="text-xs text-slate-400 mb-2">Thoughts</div>
+              <div id="thoughtsLabel" class="text-xs text-slate-400 mb-2" data-testid="thoughts-label">Output</div>
               <div id="thoughts" class="font-mono text-sm space-y-1 h-[32vh] overflow-auto" data-testid="thoughts-stream"></div>
             </div>
             <div class="p-3">
@@ -82,6 +84,41 @@
             <pre id="evidence" class="text-xs text-slate-300 h-[24vh] overflow-auto" data-testid="evidence-json">{}</pre>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center" data-testid="settings-modal">
+    <div class="bg-slate-900 border border-slate-800 rounded p-4 w-[28rem]">
+      <div class="text-sm mb-3">Upstream Provider</div>
+      <div class="space-y-2">
+        <label class="block text-xs text-slate-400">Name</label>
+        <input id="provName" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm" placeholder="custom" data-testid="prov-name" />
+        <label class="block text-xs text-slate-400 mt-2">Base URL</label>
+        <input id="provUrl" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm" placeholder="http://localhost:1234/v1" data-testid="prov-url" />
+        <label class="block text-xs text-slate-400 mt-2">API key env var (optional)</label>
+        <input id="provEnv" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm" placeholder="OPENROUTER_KEY" data-testid="prov-env" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button id="saveSettings" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-3 py-1 rounded" data-testid="settings-save">Save</button>
+        <button id="closeSettings" class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-3 py-1 rounded" data-testid="settings-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Prompt Modal -->
+  <div id="testModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center" data-testid="test-modal">
+    <div class="bg-slate-900 border border-slate-800 rounded p-4 w-[28rem]">
+      <div class="text-sm mb-3">Send a test prompt</div>
+      <div class="space-y-2">
+        <label class="block text-xs text-slate-400">Model</label>
+        <input id="testModel" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm" placeholder="openai/gpt-oss-20b" data-testid="test-model" />
+        <label class="block text-xs text-slate-400 mt-2">Prompt</label>
+        <textarea id="testText" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm h-28" placeholder="Type a quick prompt..." data-testid="test-text"></textarea>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button id="sendTest" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-3 py-1 rounded" data-testid="test-send">Send</button>
+        <button id="closeTest" class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-3 py-1 rounded" data-testid="test-close">Close</button>
       </div>
     </div>
   </div>

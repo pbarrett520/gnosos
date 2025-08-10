@@ -37,6 +37,9 @@ This document captures what’s implemented in this repo today and what remains 
     - Testability: `data-testid` hooks added for Playwright MCP.
   - `/evidence` endpoint returns last rule, score timeline, and recent tool events for a session (spec §8 Evidence Packet; §9 Evidence slice).
   - Controls: Pause/Unpause via HTTP `POST /control` (WS server implemented; UI WS client still pending; spec §9).
+  - Config: UI-driven provider configuration via Settings modal. Server exposes `GET /config` and `POST /config` and persists to `config.yaml`. No YAML edits required for common setup.
+  - First-run UX: "Test prompt" action calls `/dev/test_chat` to stream tokens from the configured provider without an external client.
+  - Live Brain mapping: Output (all model tokens) vs Actions (Tool/File/Net only) for clarity.
 - 11) Alerts (MVP)
   - TTS wiring: ElevenLabs client invoked on `Alert` (≥ min_score) and `hard_pause`; env-based (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`) (spec §11; triggers §348–366).
 - 12) OpenAI Proxy Semantics
@@ -66,6 +69,8 @@ This document captures what’s implemented in this repo today and what remains 
   - Full dashboard: Runway (risk strip), Live Brain split (Think vs Actions), Tripwire Console with allowlist actions, Evidence packet download (spec §9).
   - Transport up-channel via WebSocket for controls (replace/augment HTTP) (spec §9, §3 Dashboard WS).
   - Token heat hints and timestamps (spec §9 Live Brain).
+  - Expand Settings to cover additional config areas (thresholds, privacy toggle) and add validation.
+  - WS client wiring in `app.js` with reconnect + HTTP fallback; Playwright tests for WS flows.
 - 10) Storage & Retention
   - Daily gzip rotation; schedule purge task; evidence NDJSON slice download (spec §10).
 - 11) Alerts (TTS)

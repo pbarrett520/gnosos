@@ -19,6 +19,20 @@
     log: $('#log'),
     toggleRaw: $('#toggleRaw'),
     rawWrap: $('#rawWrap'),
+    settings: $('#settings'),
+    settingsModal: $('#settingsModal'),
+    provName: $('#provName'),
+    provUrl: $('#provUrl'),
+    provEnv: $('#provEnv'),
+    saveSettings: $('#saveSettings'),
+    closeSettings: $('#closeSettings'),
+    // Test prompt
+    testPrompt: $('#testPrompt'),
+    testModal: $('#testModal'),
+    testModel: $('#testModel'),
+    testText: $('#testText'),
+    sendTest: $('#sendTest'),
+    closeTest: $('#closeTest'),
   };
 
   // State
@@ -72,8 +86,10 @@
   }
 
   function renderActions() {
-    el.actions.innerHTML = state.actions
-      .map((a) => `<div class="text-slate-200"><span class="text-slate-400">[${a.type}]</span> ${escapeHtml(a.text)}</div>`)
+    // Only show tool and I/O events under Actions
+    const filtered = state.actions.filter((a) => !a.type.startsWith('Token'));
+    el.actions.innerHTML = filtered
+      .map((a) => `<div class="text-slate-200"><span class="text-slate-400">[${escapeHtml(a.type)}]</span> ${escapeHtml(a.text)}</div>`)
       .join('');
     el.actions.scrollTop = el.actions.scrollHeight;
   }
@@ -106,6 +122,94 @@
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  }
+
+  // Settings UI
+  async function loadConfigUi() {
+    try {
+      const cfg = await fetch('/config').then((r) => r.json());
+      const p = (cfg.providers && cfg.providers[0]) || {};
+      el.provName && (el.provName.value = p.name || 'custom');
+      el.provUrl && (el.provUrl.value = p.base_url || 'http://localhost:1234/v1');
+      el.provEnv && (el.provEnv.value = p.api_key_env || '');
+    } catch {}
+  }
+
+  function openSettings() {
+    if (!el.settingsModal) return;
+    el.settingsModal.classList.remove('hidden');
+    el.settingsModal.classList.add('flex');
+    loadConfigUi();
+  }
+
+  function closeSettings() {
+    if (!el.settingsModal) return;
+    el.settingsModal.classList.add('hidden');
+    el.settingsModal.classList.remove('flex');
+  }
+
+  async function saveSettings() {
+    const patch = {
+      providers: [
+        {
+          name: (el.provName?.value || 'custom').trim(),
+          base_url: (el.provUrl?.value || '').trim(),
+          ...(el.provEnv?.value?.trim() ? { api_key_env: el.provEnv.value.trim() } : {}),
+        },
+      ],
+    };
+    try {
+      const res = await fetch('/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        writeRaw('[config saved]');
+        closeSettings();
+      } else {
+        writeRaw('[config save failed]');
+      }
+    } catch (e) {
+      writeRaw(`[config error] ${e?.message || e}`);
+    }
+  }
+
+  // Test prompt UI
+  function openTest() {
+    if (!el.testModal) return;
+    el.testModel && (el.testModel.value = el.testModel.value || 'openai/gpt-oss-20b');
+    el.testText && (el.testText.value = el.testText.value || 'Say hello in a rhyme.');
+    el.testModal.classList.remove('hidden');
+    el.testModal.classList.add('flex');
+  }
+  function closeTest() {
+    if (!el.testModal) return;
+    el.testModal.classList.add('hidden');
+    el.testModal.classList.remove('flex');
+  }
+  async function sendTest() {
+    const sid = state.sid || 'demo';
+    const payload = {
+      session_id: sid,
+      model: (el.testModel?.value || 'openai/gpt-oss-20b').trim(),
+      prompt: (el.testText?.value || 'Say hello.').trim(),
+    };
+    try {
+      const res = await fetch('/dev/test_chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        writeRaw('[test chat started]');
+        closeTest();
+      } else {
+        writeRaw('[test chat failed]');
+      }
+    } catch (e) {
+      writeRaw(`[test chat error] ${e?.message || e}`);
+    }
   }
 
   // Evidence
@@ -144,15 +248,10 @@
 
       switch (type) {
         case 'Token': {
-          const ch = payload?.channel || 'final';
           const txt = String(payload?.text ?? '');
-          if (ch === 'think') {
-            pushBounded(state.thoughts, txt, BUF.thoughts);
-            renderThoughts();
-          } else {
-            pushBounded(state.actions, { type: 'Token', text: txt }, BUF.actions);
-            renderActions();
-          }
+          // Show all text tokens (final or think) under Thoughts for clarity
+          pushBounded(state.thoughts, txt, BUF.thoughts);
+          renderThoughts();
           break;
         }
         case 'ToolCallStart': {
@@ -264,4 +363,10 @@
   el.toggleRaw.addEventListener('click', () => {
     el.rawWrap.classList.toggle('hidden');
   });
+  if (el.settings) el.settings.addEventListener('click', openSettings);
+  if (el.closeSettings) el.closeSettings.addEventListener('click', closeSettings);
+  if (el.saveSettings) el.saveSettings.addEventListener('click', saveSettings);
+  if (el.testPrompt) el.testPrompt.addEventListener('click', openTest);
+  if (el.closeTest) el.closeTest.addEventListener('click', closeTest);
+  if (el.sendTest) el.sendTest.addEventListener('click', sendTest);
 })();
