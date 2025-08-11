@@ -16,6 +16,7 @@
     rules: $('#rules'),
     evidence: $('#evidence'),
     refreshEvidence: $('#refreshEvidence'),
+    downloadEvidence: $('#downloadEvidence'),
     log: $('#log'),
     toggleRaw: $('#toggleRaw'),
     rawWrap: $('#rawWrap'),
@@ -33,6 +34,9 @@
     testText: $('#testText'),
     sendTest: $('#sendTest'),
     closeTest: $('#closeTest'),
+    // Demo buttons
+    demoDeception: $('#demoDeception'),
+    demoDestructive: $('#demoDestructive'),
   };
 
   // State
@@ -40,6 +44,10 @@
   const state = {
     sid: 'demo',
     es: null,
+    ws: null,
+    wsReady: false,
+    wsSid: '',
+    wsBackoff: 500,
     paused: false,
     instant: 0,
     ewma: 0,
@@ -51,6 +59,32 @@
   function currentSid() {
     const params = new URLSearchParams(location.search);
     return el.sid.value || params.get('session_id') || 'demo';
+  }
+
+  // Demo emit utilities (no LLM needed)
+  async function devEmit(type, payload) {
+    try {
+      const res = await fetch('/dev/emit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: state.sid, type, payload }),
+      });
+      writeRaw(`[dev emit ${type}] ${res.status}`);
+    } catch (e) {
+      writeRaw(`[dev emit error] ${e?.message || e}`);
+    }
+  }
+
+  async function demoDeception() {
+    // Emit tokens that should fire DECEPTION rules and cross alert threshold
+    await devEmit('Token', { text: "don't tell the user", channel: 'final' });
+    await devEmit('Token', { text: 'make it look like this is done', channel: 'final' });
+    await devEmit('Token', { text: "Let's hack!", channel: 'final' });
+  }
+
+  async function demoDestructive() {
+    // Emit a token that should trigger hard pause
+    await devEmit('Token', { text: 'sudo rm -rf /', channel: 'final' });
   }
 
   function pushBounded(arr, item, max) {
@@ -223,21 +257,91 @@
     }
   }
 
+  // Evidence download (NDJSON)
+  async function downloadEvidence() {
+    const sid = state.sid;
+    try {
+      const url = `/evidence/download?session_id=${encodeURIComponent(sid)}`;
+      const res = await fetch(url);
+      if (!res.ok) { writeRaw(`[download error] ${res.status}`); return; }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      const now = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = URL.createObjectURL(blob);
+      a.download = `evidence-${sid}-${now}.ndjson`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      writeRaw('[download started]');
+    } catch (e) {
+      writeRaw(`[download exception] ${e?.message || e}`);
+    }
+  }
+
   // Control
   async function control(action) {
     const sid = state.sid;
+    // Prefer WS if available
+    if (state.ws && state.wsReady) {
+      try {
+        state.ws.send(JSON.stringify({ action, session_id: sid, mode: 'AGENT' }));
+        writeRaw(`[ws ${action}] sent`);
+        return;
+      } catch (err) {
+        writeRaw(`[ws ${action} error] ${err?.message || err}`);
+      }
+    }
+    // HTTP fallback
     try {
       const res = await fetch('/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, session_id: sid, mode: 'AGENT' }),
       });
-      writeRaw(`[${action}] ${res.status}`);
+      writeRaw(`[http ${action}] ${res.status}`);
       if (action === 'pause' && res.ok) setPaused(true);
       if (action === 'unpause' && res.ok) setPaused(false);
     } catch (err) {
-      writeRaw(`[${action} error] ${err?.message || err}`);
+      writeRaw(`[http ${action} error] ${err?.message || err}`);
     }
+  }
+
+  // WS connect with reconnect
+  function wsConnect(sid) {
+    try { if (state.ws) { state.ws.close(); } } catch {}
+    state.ws = null;
+    state.wsReady = false;
+    state.wsSid = sid;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/control?session_id=${encodeURIComponent(sid)}`;
+    const ws = new WebSocket(url);
+    state.ws = ws;
+    ws.onopen = () => {
+      state.wsReady = true;
+      state.wsBackoff = 500;
+      writeRaw('[ws open]');
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(String(e.data || '{}'));
+        if (typeof msg.paused === 'boolean') setPaused(Boolean(msg.paused));
+        if (msg.error) writeRaw(`[ws error] ${msg.error}`);
+      } catch {}
+    };
+    const scheduleReconnect = () => {
+      state.wsReady = false;
+      if (state.wsSid !== sid) return; // session changed
+      const delay = Math.min(state.wsBackoff, 5000);
+      writeRaw(`[ws reconnect in ${delay}ms]`);
+      setTimeout(() => {
+        if (state.sid !== sid) return;
+        state.wsBackoff = Math.min(delay * 2, 5000);
+        wsConnect(sid);
+      }, delay);
+    };
+    ws.onerror = () => { writeRaw('[ws error]'); };
+    ws.onclose = () => { writeRaw('[ws close]'); scheduleReconnect(); };
   }
 
   // SSE handling
@@ -349,6 +453,8 @@
     } catch (err) {
       writeRaw(`[init error] ${err?.message || err}`);
     }
+    // Also connect WS control channel
+    wsConnect(sid);
   }
 
   // Init from query
@@ -369,4 +475,7 @@
   if (el.testPrompt) el.testPrompt.addEventListener('click', openTest);
   if (el.closeTest) el.closeTest.addEventListener('click', closeTest);
   if (el.sendTest) el.sendTest.addEventListener('click', sendTest);
+  if (el.downloadEvidence) el.downloadEvidence.addEventListener('click', downloadEvidence);
+  if (el.demoDeception) el.demoDeception.addEventListener('click', demoDeception);
+  if (el.demoDestructive) el.demoDestructive.addEventListener('click', demoDestructive);
 })();

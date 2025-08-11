@@ -27,19 +27,17 @@ This document captures what’s implemented in this repo today and what remains 
 - 8) Actions & Controls
   - Pause/Unpause via HTTP `POST /control` (AGENT mode) (spec §8).
   - WebSocket control endpoint (server-side) at `GET /control` implemented using Hono Bun adapter; handles `{ action, session_id, mode }` (spec §9 Dashboard WS). UI WS client pending.
-- 9) UI (MVP → skeleton dashboard)
-  - Static UI served from `public/ui/` (spec §9). Built skeleton dashboard:
-    - Runway: EWMA risk strip with color states; paused badge (spec §9 Runway).
-    - Live Brain split: Thoughts (`channel:"think"`) vs Actions (Tool/File/Net events) (spec §9 Live Brain).
-    - Tripwire Console: lists recent `RuleFire` with category/id/weight (spec §9 Tripwire Console).
-    - Evidence panel: fetch/refresh `/evidence?session_id=...` to display JSON (spec §8 Evidence Packet; §9 Evidence slice).
-    - Raw Log: collapsible SSE raw feed for debugging.
-    - Testability: `data-testid` hooks added for Playwright MCP.
-  - `/evidence` endpoint returns last rule, score timeline, and recent tool events for a session (spec §8 Evidence Packet; §9 Evidence slice).
-  - Controls: Pause/Unpause via HTTP `POST /control` (WS server implemented; UI WS client still pending; spec §9).
-  - Config: UI-driven provider configuration via Settings modal. Server exposes `GET /config` and `POST /config` and persists to `config.yaml`. No YAML edits required for common setup.
-  - First-run UX: "Test prompt" action calls `/dev/test_chat` to stream tokens from the configured provider without an external client.
-  - Live Brain mapping: Output (all model tokens) vs Actions (Tool/File/Net only) for clarity.
+ - 9) UI (Dashboard + controls)
+   - Static UI served from `public/ui/` (spec §9). Dashboard includes:
+   - Runway: EWMA risk strip with color states; paused badge (spec §9 Runway).
+   - Live Brain split: Output (all tokens) vs Actions (Tool/File/Net events) (spec §9 Live Brain).
+   - Tripwire Console: lists `RuleFire` with category/id/weight (spec §9 Tripwire Console).
+   - Evidence: JSON view via `/evidence?session_id=...` and Download button for NDJSON via `/evidence/download`.
+   - Controls: Pause/Unpause via WebSocket client (with reconnect) with HTTP fallback.
+   - Dev: Demo buttons to simulate DECEPTION (threshold alert) and DESTRUCTIVE_OPS (hard pause) via `/dev/emit`.
+   - Raw Log: collapsible SSE raw feed. Testability: `data-testid` hooks for Playwright MCP.
+   - Settings: UI-driven provider config; server `GET/POST /config` persists to YAML.
+   - First-run UX: "Test prompt" calls `/dev/test_chat` for token stream.
 - 11) Alerts (MVP)
   - TTS wiring: ElevenLabs client invoked on `Alert` (≥ min_score) and `hard_pause`; env-based (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`) (spec §11; triggers §348–366).
 - 12) OpenAI Proxy Semantics
@@ -66,13 +64,11 @@ This document captures what’s implemented in this repo today and what remains 
   - Implement repetition detection and quoted/meta guards (spec §231–241).
   - Optional semantic scorer flag (deferred; spec §229).
 - 9) UI
-  - Full dashboard: Runway (risk strip), Live Brain split (Think vs Actions), Tripwire Console with allowlist actions, Evidence packet download (spec §9).
-  - Transport up-channel via WebSocket for controls (replace/augment HTTP) (spec §9, §3 Dashboard WS).
+  - Tripwire Console allowlist actions; Playwright tests for WS flows.
   - Token heat hints and timestamps (spec §9 Live Brain).
   - Expand Settings to cover additional config areas (thresholds, privacy toggle) and add validation.
-  - WS client wiring in `app.js` with reconnect + HTTP fallback; Playwright tests for WS flows.
 - 10) Storage & Retention
-  - Daily gzip rotation; schedule purge task; evidence NDJSON slice download (spec §10).
+  - Daily gzip rotation; schedule purge task.
 - 11) Alerts (TTS)
   - Randomized phrases by category/severity; two voice profiles; respect profiles from config (spec §11).
 - 12) Proxy Semantics
@@ -89,7 +85,8 @@ This document captures what’s implemented in this repo today and what remains 
 ## How to Run (current)
 - Configure `config.yaml` with your provider; LM Studio default: `http://localhost:1234/v1` (spec §19).
 - Dev: `bun run dev`; Proxy: `http://localhost:8080/v1/chat/completions`.
-- UI: `http://localhost:8080/ui?session_id=demo`; Controls: WS `ws://localhost:8080/control?session_id=...` (server ready) or HTTP `POST /control` (current UI fallback).
+ - UI: `http://localhost:8080/ui?session_id=demo`; Controls: WS `ws://localhost:8080/control?session_id=...` (UI uses WS with HTTP fallback).
+ - Demo (no LLM needed): Use "Demo: Deception" and "Demo: Hard Pause" buttons to simulate events. Evidence Download fetches NDJSON file for the current session.
 - Tests: `bun test`; Build: `bun build --compile misalign.ts --outfile misalign`.
 
 ## Acceptance Coverage Snapshot

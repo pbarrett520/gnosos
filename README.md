@@ -51,8 +51,14 @@ Point your client (Cursor, etc.) at `http://localhost:8080/v1/chat/completions`.
 Only provider settings are exposed in the v1 UI. Additional config areas will be added incrementally.
 
 ### First-run check (no client needed)
-- Click "Test prompt" in the UI to send a quick prompt via the configured provider. Tokens will stream into the Output panel.
-- Output shows model text; Actions lists only Tool/File/Net events.
+- Use demo buttons to simulate without any LLM:
+  - "Demo: Deception" emits phrases to trigger a threshold alert (DECEPTION).
+  - "Demo: Hard Pause" emits a destructive command to trigger immediate pause.
+- Click "Test prompt" to send a real prompt via the configured provider (optional). Tokens stream into Output; Actions lists Tool/File/Net events only.
+
+### Evidence download
+- Click "Download" in the Evidence panel to download an NDJSON slice for the current `session_id`.
+- Endpoint: `GET /evidence/download?session_id=...&limit=...` (`application/x-ndjson`).
 
 Tip: if port 8080 is in use, run on a different port for this session:
 ```

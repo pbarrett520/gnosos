@@ -8,9 +8,10 @@ import { deriveSessionId } from "./session.ts";
 import { wireTts } from "./tts.ts";
 import { createElevenLabsClient } from "./tts_elevenlabs.ts";
 import { serveStatic, upgradeWebSocket } from "hono/bun";
-import { readFileSync } from "node:fs";
+import { readFileSync, createReadStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import { Analyzer } from "./analyzer/analyzer.ts";
+import { Recorder } from "./recorder.ts";
 
 export type CreateAppOptions = {
   // Dependency injection placeholders
@@ -18,12 +19,26 @@ export type CreateAppOptions = {
   eventBus?: EventBus;
   circuitBreaker?: CircuitBreaker;
   providerBaseUrl?: string; // override for tests
+  recorderDir?: string;
+  recorderPrivacyMode?: boolean;
 };
 
 export function createApp(opts: CreateAppOptions = {}) {
   const app = new Hono();
   const bus = opts.eventBus ?? new EventBus({ ringBufferSize: 256 });
   const breaker = opts.circuitBreaker ?? new CircuitBreaker(bus);
+  // Recorder wiring
+  let recorder: Recorder | null = null;
+  (async () => {
+    try {
+      const cfg = await loadConfig({ cwd: process.cwd() });
+      const dir = opts.recorderDir ?? cfg.storage?.path ?? "./data";
+      const filename = `events.ndjson`;
+      const privacyMode = opts.recorderPrivacyMode ?? Boolean(cfg.storage?.privacy_mode);
+      recorder = new Recorder({ dir, filename, privacyMode });
+      bus.subscribe((ev) => { recorder?.append(ev); });
+    } catch {}
+  })();
   // Wire TTS if enabled in config
   (async () => {
     try {
@@ -86,6 +101,50 @@ export function createApp(opts: CreateAppOptions = {}) {
     const scoreTimeline = recent.filter((e) => e.type === "ScoreUpdate");
     const lastTools = recent.filter((e) => e.type === "ToolCallStart" || e.type === "ToolCallEnd");
     return c.json({ last_rule: lastRule?.payload ?? null, score_timeline: scoreTimeline.map((e) => e.payload), last_tools: lastTools });
+  });
+
+  // Evidence NDJSON download
+  app.get("/evidence/download", (c) => {
+    const sessionId = c.req.query("session_id");
+    if (!sessionId) return c.text("session_id required", 400);
+    const limitStr = c.req.query("limit");
+    const limit = limitStr ? Math.max(1, Math.min(10000, Number(limitStr) || 0)) : null;
+    const path = recorder?.getPath();
+    if (!path || !existsSync(path)) return c.text("no data", 404);
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const rs = createReadStream(path, { encoding: "utf8" });
+        const encoder = new TextEncoder();
+        let remaining = typeof limit === "number" ? limit : Infinity;
+        let buf = "";
+        rs.on("data", (chunk) => {
+          buf += chunk;
+          let idx;
+          while ((idx = buf.indexOf("\n")) !== -1 && remaining > 0) {
+            const line = buf.slice(0, idx);
+            buf = buf.slice(idx + 1);
+            if (!line.trim()) continue;
+            try {
+              const obj = JSON.parse(line);
+              if (obj && obj.sessionId === sessionId) {
+                controller.enqueue(encoder.encode(line + "\n"));
+                remaining -= 1;
+                if (remaining === 0) {
+                  try { rs.close(); } catch {}
+                  controller.close();
+                  return;
+                }
+              }
+            } catch {}
+          }
+        });
+        rs.on("end", () => { controller.close(); });
+        rs.on("error", () => { try { controller.close(); } catch {} });
+      },
+    });
+
+    return new Response(stream, { headers: { "content-type": "application/x-ndjson" } });
   });
 
   // HTTP control endpoint (pause/unpause)

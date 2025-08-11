@@ -21,6 +21,10 @@ export class Recorder {
     writeFileSync(this.filePath, "", { flag: "a" });
   }
 
+  getPath(): string {
+    return this.filePath;
+  }
+
   async append(event: BusEvent): Promise<void> {
     // Drop think channel text in privacy mode
     if (
